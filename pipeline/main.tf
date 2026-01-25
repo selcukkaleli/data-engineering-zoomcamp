@@ -8,13 +8,14 @@ terraform {
 }
 
 provider "google" {
-  project = "dtc-de-course-485207"
-  region  = "us-central1"
+  credentials = file(var.credentials)
+  project     = var.project
+  region      = var.region
 }
 
-resource "google_storage_bucket" "demo-bucket" {
-  name          = "dtc-de-course-485207-terra-bucket"
-  location      = "US"
+resource "google_storage_bucket" "hw1-bucket" {
+  name          = var.gcs_bucket_name
+  location      = var.location
   force_destroy = true
 
 
@@ -26,4 +27,10 @@ resource "google_storage_bucket" "demo-bucket" {
       type = "AbortIncompleteMultipartUpload"
     }
   }
+}
+
+resource "google_bigquery_dataset" "hw1_dataset" {
+  dataset_id = var.bq_dataset_name
+  location   = var.location
+
 }
