@@ -13,7 +13,7 @@ provider "google" {
   region      = var.region
 }
 
-resource "google_storage_bucket" "hw1-bucket" {
+resource "google_storage_bucket" "hw2-bucket" {
   name          = var.gcs_bucket_name
   location      = var.location
   force_destroy = true
@@ -29,7 +29,7 @@ resource "google_storage_bucket" "hw1-bucket" {
   }
 }
 
-resource "google_bigquery_dataset" "hw1_dataset" {
+resource "google_bigquery_dataset" "hw2_dataset" {
   dataset_id = var.bq_dataset_name
   location   = var.location
 
