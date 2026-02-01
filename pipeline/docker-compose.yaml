@@ -47,12 +47,18 @@ services:
     # Our base image runs without root, but the Docker Compose implementation needs root to access the Docker socket
     # To run Kestra in a rootless mode in production, see: https://kestra.io/docs/installation/podman-compose
     user: "root"
+    env_file:
+      - .env
     command: server standalone
     volumes:
       - kestra_data:/app/storage
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/kestra-wd:/tmp/kestra-wd
+      - ./.secrets:/secrets:ro
     environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/dtc-de-course-485207-110873b83c14.json
+      SECRET_GEMINI_API_KEY: ${SECRET_GEMINI_API_KEY}
+      GEMINI_API_KEY_PLAIN: ${GEMINI_API_KEY_PLAIN}
       KESTRA_CONFIGURATION: |
         datasources:
           postgres:
@@ -61,6 +67,14 @@ services:
             username: kestra
             password: k3str4
         kestra:
+          ai:
+            type: gemini
+            gemini:
+              model-name: gemini-2.5-flash
+              api-key: ${GEMINI_API_KEY_PLAIN}
+          secrets:
+            type: env
+            envPrefix: SECRET_
           server:
             basicAuth:
               username: "admin@kestra.io" # it must be a valid email address

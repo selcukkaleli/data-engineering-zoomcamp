@@ -1,6 +1,6 @@
 variable "credentials" {
   description = "My Credentials"
-  default     = "./.secrets/gcp-sa.json"
+  default     = "./.secrets/dtc-de-course-485207-110873b83c14.json"
 
 }
 
