@@ -8,16 +8,27 @@ Module 3: Data Warehousing & BigQuery
 
 | File/Folder | Description |
 |------|-------------|
+| **Module Folders** | |
+| `module_2/` | Module 2: Workflow Orchestration with Kestra |
+| `module_3/` | Module 3: Data Warehousing & BigQuery homework solutions |
+| `ny_taxi_postgres_data/18/docker/` | PostgreSQL data volume for Module 1 |
+| **Core Files** | |
 | `Dockerfile` | Docker configuration for the pipeline |
 | `docker-compose.yaml` | Docker Compose setup for PostgreSQL and pgAdmin |
 | `ingest_data.py` | Python script for ingesting taxi data into PostgreSQL |
 | `pipeline.py` | Data pipeline script |
 | `main.py` | Main application entry point |
+| `notebook.ipynb` | Jupyter notebook for exploratory data analysis |
+| **Infrastructure** | |
 | `main.tf` | Terraform main configuration file |
 | `variables.tf` | Terraform variables definition |
-| `green_tripdata_2025-11.parquet` | NYC Green Taxi trip data for November 2025 |
+| `.terraform.lock.hcl` | Terraform dependency lock file |
+| **Data Files** | |
 | `taxi_zone_lookup.csv` | Taxi zone reference data |
-| `module_2/hw2/` | Module 2 homework - Kestra workflow files |
+| **Configuration** | |
+| `.python-version` | Python version specification |
+| `pyproject.toml` | Python project configuration |
+| `uv.lock` | UV package manager lock file |
 
 ---
 
