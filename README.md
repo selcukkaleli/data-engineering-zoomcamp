@@ -1,7 +1,8 @@
 # Data Engineering Zoomcamp
 
 Workshop Codespaces - Module 1: Docker & SQL  
-Module 2: Workflow Orchestration with Kestra
+Module 2: Workflow Orchestration with Kestra  
+Module 3: Data Warehousing & BigQuery
 
 ## Repository Structure
 
@@ -199,10 +200,170 @@ WHERE filename = 'yellow_tripdata_2021-03.csv';
 
 ---
 
+## Module 3: Data Warehousing & BigQuery
+
+### Assignment Overview
+Worked with BigQuery and Google Cloud Storage to analyze NYC Yellow Taxi data from January-June 2024. Created external tables, materialized tables, and explored partitioning and clustering strategies for query optimization.
+
+### HW3 Solutions
+
+#### Setup: Creating Tables
+
+**External Table:**
+```sql
+CREATE OR REPLACE EXTERNAL TABLE `dtc-de-course-485207.zoomcamp_module3_hw3.external_yellow_tripdata`
+OPTIONS (
+  format = 'PARQUET',
+  uris = ['gs://dtc-de-course-485207-terra-bucket/yellow_tripdata_2024-0*.parquet']
+);
+```
+
+**Non-Partitioned Materialized Table:**
+```sql
+CREATE OR REPLACE TABLE dtc-de-course-485207.zoomcamp_module3_hw3.yellow_tripdata_non_partitioned AS
+SELECT * FROM `dtc-de-course-485207.zoomcamp_module3_hw3.external_yellow_tripdata`;
+```
+
+---
+
+#### Question 1. Counting Records
+**Question:** What is count of records for the 2024 Yellow Taxi Data?
+
+**Answer:** 20,332,093
+
+**Explanation:** Found in the "Details" page of the BigQuery table.
+
+---
+
+#### Question 2. Data Read Estimation
+**Question:** What is the estimated amount of data that will be read when counting distinct PULocationIDs on the External Table vs the Materialized Table?
+
+**Answer:** 0 MB for the External Table and 155.12 MB for the Materialized Table
+
+**SQL Queries:**
+```sql
+SELECT COUNT(DISTINCT `PULocationID`) 
+FROM dtc-de-course-485207.zoomcamp_module3_hw3.external_yellow_tripdata;
+
+SELECT COUNT(DISTINCT `PULocationID`) 
+FROM dtc-de-course-485207.zoomcamp_module3_hw3.yellow_tripdata_non_partitioned;
+```
+
+---
+
+#### Question 3. Understanding Columnar Storage
+**Question:** Why are the estimated number of bytes different when querying one column vs two columns?
+
+**Answer:** BigQuery is a columnar database, and it only scans the specific columns requested in the query. Querying two columns (PULocationID, DOLocationID) requires reading more data than querying one column (PULocationID), leading to a higher estimated number of bytes processed.
+
+**SQL Queries:**
+```sql
+SELECT PULocationID 
+FROM dtc-de-course-485207.zoomcamp_module3_hw3.yellow_tripdata_non_partitioned;
+
+SELECT PULocationID, DOLocationID 
+FROM dtc-de-course-485207.zoomcamp_module3_hw3.yellow_tripdata_non_partitioned;
+```
+
+---
+
+#### Question 4. Counting Zero Fare Trips
+**Question:** How many records have a fare_amount of 0?
+
+**Answer:** 8,333
+
+**SQL Query:**
+```sql
+SELECT COUNT(*)
+FROM dtc-de-course-485207.zoomcamp_module3_hw3.yellow_tripdata_non_partitioned
+WHERE fare_amount = 0;
+```
+
+---
+
+#### Question 5. Partitioning and Clustering Strategy
+**Question:** What is the best strategy to make an optimized table in BigQuery if your query will always filter based on tpep_dropoff_datetime and order the results by VendorID?
+
+**Answer:** Partition by tpep_dropoff_datetime and Cluster on VendorID
+
+**SQL Query:**
+```sql
+CREATE OR REPLACE TABLE dtc-de-course-485207.zoomcamp_module3_hw3.yellow_tripdata_partitioned_clustered
+PARTITION BY DATE(tpep_dropoff_datetime)
+CLUSTER BY VendorID AS
+SELECT * FROM dtc-de-course-485207.zoomcamp_module3_hw3.external_yellow_tripdata;
+```
+
+---
+
+#### Question 6. Partition Benefits
+**Question:** What are the estimated bytes processed when retrieving distinct VendorIDs between 2024-03-01 and 2024-03-15 for non-partitioned vs partitioned tables?
+
+**Answer:** 310.24 MB for non-partitioned table and 26.84 MB for the partitioned table
+
+**SQL Queries:**
+```sql
+-- Non-partitioned table
+SELECT DISTINCT(VendorID) 
+FROM `dtc-de-course-485207.zoomcamp_module3_hw3.yellow_tripdata_non_partitioned`
+WHERE tpep_dropoff_datetime > "2024-03-01" 
+  AND tpep_dropoff_datetime < "2024-03-15";
+
+-- Partitioned and clustered table
+SELECT DISTINCT(VendorID) 
+FROM `dtc-de-course-485207.zoomcamp_module3_hw3.yellow_tripdata_partitioned_clustered`
+WHERE tpep_dropoff_datetime > "2024-03-01" 
+  AND tpep_dropoff_datetime < "2024-03-15";
+```
+
+**Key Insight:** Partitioning reduced the estimated bytes processed by approximately 91% (from 310.24 MB to 26.84 MB).
+
+---
+
+#### Question 7. External Table Storage
+**Question:** Where is the data stored in the External Table you created?
+
+**Answer:** GCS/GCP Bucket
+
+**Explanation:** External tables in BigQuery reference data stored in Google Cloud Storage without copying it into BigQuery's native storage.
+
+---
+
+#### Question 8. Clustering Best Practices
+**Question:** It is best practice in BigQuery to always cluster your data?
+
+**Answer:** False
+
+**Explanation:** Clustering is beneficial for large tables with specific query patterns, but it's not always necessary for all datasets. Consider table size, query patterns, and cost-benefit tradeoffs.
+
+---
+
+#### Question 9. Understanding Table Scans
+**Question:** Write a `SELECT COUNT(*)` query from the materialized table. How many bytes does it estimate will be read? Why?
+
+**Answer:** 0 bytes
+
+**Explanation:** COUNT(*) is free (0 MB) because BigQuery answers it from table metadata without scanning the actual data.
+
+---
+
+## Key Learnings from Module 3
+
+✅ Created and compared External vs Materialized tables in BigQuery  
+✅ Understood columnar storage benefits for query optimization  
+✅ Implemented partitioning and clustering strategies for large datasets  
+✅ Analyzed query performance improvements (91% reduction in bytes processed)  
+✅ Learned BigQuery cost optimization techniques  
+✅ Worked with 20M+ records of NYC Yellow Taxi data  
+✅ Integrated Google Cloud Storage with BigQuery
+
+---
+
 ## Technologies Used
 
 - **Module 1:** Docker, PostgreSQL, pgAdmin, Python, SQL
 - **Module 2:** Kestra, Google Cloud Platform (BigQuery), YAML workflows, scheduled triggers
+- **Module 3:** Google BigQuery, Google Cloud Storage (GCS), Parquet files, SQL, table partitioning & clustering
 
 ---
 
