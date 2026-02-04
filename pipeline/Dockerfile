@@ -11,6 +11,6 @@ COPY pyproject.toml .python-version uv.lock ./
 
 RUN uv sync --locked
 
-COPY ingest_data.py .
+COPY ./module_3/load_yellow_taxi_data.py .
 
-ENTRYPOINT ["python", "ingest_data.py"]
+ENTRYPOINT ["bash"]
