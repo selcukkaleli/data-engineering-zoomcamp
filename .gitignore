@@ -268,3 +268,5 @@ target/
 dbt_packages/
 logs/
 # end dbt Cloud content
+#ignore ds store files for mac
+.DS_Store
