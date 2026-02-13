@@ -6,14 +6,14 @@ select
     cast(dolocationid as int) as dropoff_location_id, 
 
     --timestamps
-    cast(lpep_pickup_datetime as timestamp) as pickup_datetime,
-    cast(lpep_dropoff_datetime as timestamp) as dropoff_datetime,
+    cast(tpep_pickup_datetime as timestamp) as pickup_datetime,
+    cast(tpep_dropoff_datetime as timestamp) as dropoff_datetime,
 
     --trip info
     store_and_fwd_flag,
     cast(passenger_count as int) as passenger_count,
     cast(trip_distance as FLOAT64) as trip_distance,
-    cast(trip_type as int) as trip_type,
+
 
     --payment info
     cast(fare_amount as numeric) as fare_amount,
@@ -25,7 +25,7 @@ select
     cast(total_amount as numeric) as total_amount,
     cast(payment_type as int) as payment_type
 
-from {{ source('raw_bigquery_data', 'green_tripdata')}}
+from {{ source('raw_bigquery_data', 'yellow_tripdata')}}
 
 -- it is not a convention to filter in staging field. But in nyc dataset it is better to apply
 where vendorid is not null
