@@ -97,4 +97,12 @@ services:
     depends_on:
       kestra_postgres:
         condition: service_started
-    
+  taxi_loader:
+    build: ./module_4
+    volumes:
+      - ./module_4:/app
+      - ./.secrets:/secrets:ro
+    environment:
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/dtc-de-course-485207-110873b83c14.json
+    depends_on:
+      - pgdatabase  
