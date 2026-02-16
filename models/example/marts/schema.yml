@@ -1,6 +1,0 @@
-version: 2
-
-models:
-  - name: dim_vendors
-    description: "This table contains vendor information."
-    
