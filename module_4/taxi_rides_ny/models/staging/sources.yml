@@ -3,13 +3,13 @@ sources:
     description: Raw taxi trip data from NYC TLC
     database: |
       {%- if target.type == 'bigquery' -%}
-        {{ env_var('GCP_PROJECT_ID', 'please-add-your-gcp-project-id-here') }}
+        {{ env_var('GCP_PROJECT_ID', 'dtc-de-course-485207') }}
       {%- else -%}
         taxi_rides_ny
       {%- endif -%}
     schema: |
       {%- if target.type == 'bigquery' -%}
-        nytaxi
+        dbt_skaleli
       {%- else -%}
         prod
       {%- endif -%}
@@ -98,3 +98,23 @@ sources:
             description: Improvement surcharge
           - name: total_amount
             description: Total amount charged
+      - name: fhv_tripdata
+        description: For-Hire Vehicle trip data for 2019
+        loaded_at_field: pickup_datetime
+        columns:
+          - name: dispatching_base_num
+            description: "No info yet"
+          - name: pickup_datetime
+            description: "No info yet"
+          - name: dropOff_datetime
+            description: "No info yet"
+          - name: PUlocationID
+            description: "No info yet"
+          - name: DOlocationID
+            description: "No info yet"
+          - name: SR_Flag
+            description: "No info yet"
+          - name: Affiliated_base_number
+            description: "No info yet"
+         
+      
