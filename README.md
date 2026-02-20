@@ -2,7 +2,8 @@
 
 Workshop Codespaces - Module 1: Docker & SQL  
 Module 2: Workflow Orchestration with Kestra  
-Module 3: Data Warehousing & BigQuery
+Module 3: Data Warehousing & BigQuery  
+Module 4: Analytics Engineering with dbt
 
 ## Repository Structure
 
@@ -11,6 +12,7 @@ Module 3: Data Warehousing & BigQuery
 | **Module Folders** | |
 | `module_2/` | Module 2: Workflow Orchestration with Kestra |
 | `module_3/` | Module 3: Data Warehousing & BigQuery homework solutions |
+| `module_4/taxi_rides_ny/` | Module 4: Analytics Engineering with dbt project |
 | `ny_taxi_postgres_data/18/docker/` | PostgreSQL data volume for Module 1 |
 | **Core Files** | |
 | `Dockerfile` | Docker configuration for the pipeline |
@@ -370,11 +372,198 @@ WHERE tpep_dropoff_datetime > "2024-03-01"
 
 ---
 
+## Module 4: Analytics Engineering with dbt
+
+### Assignment Overview
+Built transformation models using dbt to analyze NYC taxi data (Yellow and Green) for 2019-2020. Created staging models, intermediate models, and fact tables to answer analytical questions about trip patterns and revenue.
+
+### Setup: Data Preparation
+
+#### Step 1: Upload Raw CSV Files to GCS
+
+Uploaded Green and Yellow taxi data for 2019-2020 to Google Cloud Storage using a bash script with parallel downloads:
+```bash
+set -euo pipefail
+mkdir -p /tmp/taxi_green && cd /tmp/taxi_green
+
+bucket="gs://dtc-de-course-485207-terra-bucket/raw_csv/green"
+export bucket
+
+# Build the list of year-months
+( for year in 2019 2020; do
+    for month in {01..12}; do
+      echo "${year}-${month}"
+    done
+  done ) \
+| xargs -P 4 -I {} bash -lc '
+    ym="{}"
+    file="green_tripdata_${ym}.csv.gz"
+    url="https://github.com/DataTalksClub/nyc-tlc-data/releases/download/green/${file}"
+    dst="${bucket}/${file}"
+
+    # Skip if already exists
+    if gsutil -q stat "$dst"; then
+      echo "SKIP (exists): $file"
+      exit 0
+    fi
+
+    echo "Downloading $file ..."
+    wget -q -O "$file" "$url"
+
+    echo "Uploading $file ..."
+    gsutil cp "$file" "$dst"
+
+    rm -f "$file"
+  '
+```
+
+**Note:** Similar approach was used for Yellow taxi data.
+
+---
+
+#### Step 2: Create External Tables in BigQuery
+
+Created external tables pointing to the raw CSV files in GCS:
+```sql
+-- Yellow taxi external table
+CREATE OR REPLACE EXTERNAL TABLE `dtc-de-course-485207.dbt_skaleli.ext_yellow_tripdata`
+OPTIONS (
+  format = 'CSV',
+  uris = ['gs://dtc-de-course-485207-terra-bucket/raw_csv/yellow/yellow_tripdata_*.csv.gz'],
+  compression = 'GZIP',
+  skip_leading_rows = 1,
+  field_delimiter = ',',
+  allow_quoted_newlines = TRUE,
+  quote = '"'
+);
+
+-- Green taxi external table (similar approach)
+CREATE OR REPLACE EXTERNAL TABLE `dtc-de-course-485207.dbt_skaleli.ext_green_tripdata`
+OPTIONS (
+  format = 'CSV',
+  uris = ['gs://dtc-de-course-485207-terra-bucket/raw_csv/green/green_tripdata_*.csv.gz'],
+  compression = 'GZIP',
+  skip_leading_rows = 1,
+  field_delimiter = ',',
+  allow_quoted_newlines = TRUE,
+  quote = '"'
+);
+```
+
+---
+
+#### Step 3: Materialize External Tables
+
+Created partitioned and clustered tables for better query performance:
+```sql
+-- Materialize yellow taxi data
+CREATE OR REPLACE TABLE `dtc-de-course-485207.dbt_skaleli.yellow_tripdata`
+PARTITION BY DATE(tpep_pickup_datetime)
+CLUSTER BY vendorid AS
+SELECT t.*
+FROM `dtc-de-course-485207.dbt_skaleli.ext_yellow_tripdata` AS t;
+
+-- Materialize green taxi data (similar approach with lpep_pickup_datetime)
+CREATE OR REPLACE TABLE `dtc-de-course-485207.dbt_skaleli.green_tripdata`
+PARTITION BY DATE(lpep_pickup_datetime)
+CLUSTER BY vendorid AS
+SELECT t.*
+FROM `dtc-de-course-485207.dbt_skaleli.ext_green_tripdata` AS t;
+```
+
+---
+
+### HW4 Solutions
+
+#### Question 1. dbt Lineage and Execution
+**Question:** Given a dbt project with staging models (`stg_green_tripdata`, `stg_yellow_tripdata`) and an intermediate model (`int_trips_unioned`) that depends on both staging models, if you run `dbt run --select int_trips_unioned`, what models will be built?
+
+**Answer:** `int_trips_unioned` only
+
+**Explanation:** By default, `dbt run --select <model>` runs only the specified model without its upstream dependencies. To include upstream models, you would need to use `dbt run --select +int_trips_unioned`.
+
+---
+
+#### Question 2. dbt Tests
+**Question:** You have an `accepted_values` test configured for `payment_type` column with values `[1, 2, 3, 4, 5]`. A new value `6` appears in the source data. What happens when you run `dbt test --select fct_trips`?
+
+**Answer:** dbt will fail the test, returning a non-zero exit code
+
+**Explanation:** dbt tests enforce data quality constraints. When a test fails, dbt returns a non-zero exit code, which is useful in CI/CD pipelines to catch data quality issues.
+
+---
+
+#### Question 3. Counting Records in `fct_monthly_zone_revenue`
+**Question:** What is the count of records in the `fct_monthly_zone_revenue` model?
+
+**Answer:** 12,184
+
+---
+
+#### Question 4. Best Performing Zone for Green Taxis (2020)
+**Question:** Using the `fct_monthly_zone_revenue` table, find the pickup zone with the highest total revenue for Green taxi trips in 2020.
+
+**Answer:** East Harlem North
+
+**SQL Query:**
+```sql
+SELECT 
+  pickup_zone,
+  service_type,
+  revenue_month,
+  revenue_monthly_total_amount
+FROM `dtc-de-course-485207.dbt_skaleli.fct_monthly_zone_revenue` 
+WHERE service_type = "Green" 
+  AND revenue_month >= DATE'2020-01-01' 
+  AND revenue_month <= DATE'2020-12-31'
+ORDER BY revenue_monthly_total_amount DESC;
+```
+
+---
+
+#### Question 5. Green Taxi Trip Counts (October 2019)
+**Question:** What is the total number of trips for Green taxis in October 2019?
+
+**Answer:** 384,624
+
+**SQL Query:**
+```sql
+SELECT SUM(total_monthly_trips)
+FROM dtc-de-course-485207.dbt_skaleli.fct_monthly_zone_revenue
+WHERE revenue_month >= DATE'2019-10-01' 
+  AND revenue_month <= DATE'2019-10-31' 
+  AND service_type = "Green";
+```
+
+---
+
+#### Question 6. Build a Staging Model for FHV Data
+**Question:** Create a staging model for For-Hire Vehicle (FHV) trip data for 2019 and count the records after filtering out NULL `dispatching_base_num`.
+
+**Answer:** 43,244,693
+
+**Implementation:** Created `stg_fhv_tripdata` model in the dbt project located in `module_4/taxi_rides_ny/models/staging/`.
+
+---
+
+## Key Learnings from Module 4
+
+✅ Built transformation models with dbt (staging, intermediate, fact tables)  
+✅ Understood dbt model selection and lineage (`--select`, upstream/downstream)  
+✅ Implemented data quality tests with dbt (accepted_values, unique, not_null)  
+✅ Created analytical models for revenue analysis across NYC zones  
+✅ Worked with partitioned and clustered BigQuery tables  
+✅ Analyzed trip patterns and revenue trends for 2019-2020 taxi data  
+✅ Applied ELT principles: Extract (GCS), Load (BigQuery), Transform (dbt)
+
+---
+
 ## Technologies Used
 
 - **Module 1:** Docker, PostgreSQL, pgAdmin, Python, SQL
 - **Module 2:** Kestra, Google Cloud Platform (BigQuery), YAML workflows, scheduled triggers
 - **Module 3:** Google BigQuery, Google Cloud Storage (GCS), Parquet files, SQL, table partitioning & clustering
+- **Module 4:** dbt (data build tool), BigQuery, Jinja templating, SQL, data modeling, testing
 
 ---
 
