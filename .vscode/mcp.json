@@ -6,6 +6,24 @@
             "args": [
                 "mcp"
             ]
+        },
+        "dlt": {
+            "type":"stdio",
+            "command": "dlt",
+            "args": [
+                "run",
+                "--with",
+                "dlt[bigquery]",
+                "--with",
+                "dlt-mcp[search]",
+                "python",
+                "-m",
+                "dlt_mcp",
+                "pipeline",
+                "taxi_pipeline",
+                "mcp",
+                "--stdio"
+            ]
         }
     },
     "inputs": []
