@@ -3,7 +3,9 @@
 Workshop Codespaces - Module 1: Docker & SQL  
 Module 2: Workflow Orchestration with Kestra  
 Module 3: Data Warehousing & BigQuery  
-Module 4: Analytics Engineering with dbt
+Module 4: Analytics Engineering with dbt  
+Module 5: Bruin Pipeline  
+Module 6: Batch Processing with Spark
 
 ## Repository Structure
 
@@ -13,7 +15,25 @@ Module 4: Analytics Engineering with dbt
 | `module_2/` | Module 2: Workflow Orchestration with Kestra |
 | `module_3/` | Module 3: Data Warehousing & BigQuery homework solutions |
 | `module_4/taxi_rides_ny/` | Module 4: Analytics Engineering with dbt project |
+| `module_6_batch_processing/` | Module 6: Batch Processing with Spark (notebooks, scripts, data) |
+| `my-taxi-pipeline/` | Module 5: Bruin pipeline implementation |
+| `pipeline/` | Pipeline utilities (MCP config included) |
+| `dlt_workshop/` | dlt Workshop: REST API to BigQuery pipeline |
 | `ny_taxi_postgres_data/18/docker/` | PostgreSQL data volume for Module 1 |
+| **Module 6 Files** | |
+| `module_6_batch_processing/04_pyspark.ipynb` | PySpark basics notebook |
+| `module_6_batch_processing/05_taxi_shema.ipynb` | Taxi schema exploration |
+| `module_6_batch_processing/06_spark_sql.ipynb` | Spark SQL notebook |
+| `module_6_batch_processing/06_spark_sql.py` | Spark SQL script |
+| `module_6_batch_processing/06_spark_sql_big_query.py` | Spark + BigQuery integration script |
+| `module_6_batch_processing/07_groupby_join.ipynb` | GroupBy & Join operations notebook |
+| `module_6_batch_processing/09_spark_gcs.ipynb` | Spark with GCS notebook |
+| `module_6_batch_processing/module_6_hw.ipynb` | Module 6 homework solutions notebook |
+| `module_6_batch_processing/big_query_spark_cli_code.sh` | BigQuery Spark CLI commands |
+| `module_6_batch_processing/download_data.sh` | Data download script |
+| `module_6_batch_processing/fhvhv/2021/01/` | FHV data for 2021 January |
+| `module_6_batch_processing/tmp/revenue-zones/` | Revenue zones temp data |
+| `module_6_batch_processing/zones/` | Zone lookup data |
 | **Core Files** | |
 | `Dockerfile` | Docker configuration for the pipeline |
 | `docker-compose.yaml` | Docker Compose setup for PostgreSQL and pgAdmin |
@@ -558,12 +578,176 @@ WHERE revenue_month >= DATE'2019-10-01'
 
 ---
 
+## Module 6: Batch Processing with Spark
+
+### Assignment Overview
+Worked with Apache Spark and PySpark to process NYC Yellow Taxi data for November 2025. Explored Spark fundamentals including session creation, DataFrame operations, partitioning, Spark SQL, GroupBy/Join operations, and BigQuery integration via the Spark connector. All work is in the `module_6_batch_processing/` folder and includes:
+
+- `04_pyspark.ipynb` - PySpark basics and DataFrame operations
+- `05_taxi_shema.ipynb` - Schema inference and data exploration
+- `06_spark_sql.ipynb` / `06_spark_sql.py` - Spark SQL queries
+- `06_spark_sql_big_query.py` - BigQuery integration via Spark connector
+- `07_groupby_join.ipynb` - GroupBy and Join transformations
+- `09_spark_gcs.ipynb` - Reading/writing data from Google Cloud Storage
+- `module_6_hw.ipynb` - Homework solutions notebook
+- `big_query_spark_cli_code.sh` - CLI commands for Spark-BigQuery jobs
+- `download_data.sh` - Script to download Yellow Taxi November 2025 Parquet file
+
+### HW6 Solutions
+
+#### Question 1. Spark Version
+
+**Question:** Install Spark, run PySpark, create a local Spark session, and execute `spark.version`. What's the output?
+
+**Answer:** `4.0.2`
+
+**Code:**
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .master("local[*]") \
+    .appName("test") \
+    .getOrCreate()
+
+print(spark.version)
+# Output: 4.0.2
+```
+
+---
+
+#### Question 2. Average Parquet File Size
+
+**Question:** Read the November 2025 Yellow Taxi data into a Spark DataFrame, repartition it to 4 partitions, save to Parquet, and find the average size of the resulting files.
+
+**Answer:** ~25 MB
+
+**Code:**
+```python
+df_nyc = spark.read.parquet('./data/homework_data/')
+df_nyc = df_nyc.repartition(4)
+df_nyc.write.mode("overwrite").parquet('./data/homework_data/question_2')
+```
+
+**Explanation:** After repartitioning to 4 partitions and writing to Parquet, each output file is approximately 25 MB, giving a total of ~100 MB for the full dataset.
+
+---
+
+#### Question 3. Trip Count on November 15th
+
+**Question:** How many taxi trips started on November 15th, 2025?
+
+**Answer:** 162,604
+
+**Code:**
+```python
+df_nyc = spark.read.parquet('./data/homework_data/question_2')
+df_nyc.createOrReplaceTempView('trips_data_nov_25')
+df_result = spark.sql("""
+SELECT 
+    COUNT(*)
+FROM 
+    trips_data_nov_25
+WHERE
+    tpep_pickup_datetime >= '2025-11-15 00:00:00' AND
+    tpep_pickup_datetime < '2025-11-16 00:00:00'
+""")
+df_result.show()
+
+# Output: 162604
+```
+
+---
+
+#### Question 4. Longest Trip in Hours
+
+**Question:** What is the length of the longest trip in the dataset in hours?
+
+**Answer:** 90.6 hours
+
+**Code:**
+```python
+df_nyc = spark.read.parquet('./data/homework_data/question_2')
+df_nyc.createOrReplaceTempView('trips_data_nov_25')
+df_result_4 = spark.sql("""
+SELECT
+    tpep_pickup_datetime,
+    tpep_dropoff_datetime,
+    (unix_timestamp(tpep_dropoff_datetime) - unix_timestamp(tpep_pickup_datetime)) / 3600.0 AS trip_hours
+FROM trips_data_nov_25
+ORDER BY trip_hours DESC
+LIMIT 10
+""")
+df_result_4.show()
+
+# Output: 90.6
+```
+
+---
+
+#### Question 5. Spark UI Port
+
+**Question:** Spark's User Interface which shows the application's dashboard runs on which local port?
+
+**Answer:** 4040
+
+**Explanation:** Spark Web UI is accessible at `http://localhost:4040` by default when running a local Spark session. It provides job monitoring, DAG visualization, stage details, and executor information.
+
+---
+
+#### Question 6. Least Frequent Pickup Location Zone
+
+**Question:** Using the zone lookup data and Yellow November 2025 data, what is the name of the LEAST frequent pickup location zone?
+
+**Answer:** Governor's Island/Ellis Island/Liberty Island (and Arden Heights — both zones tied for least frequent)
+
+**Code:**
+```python
+# Load zone lookup
+df_zones.createOrReplaceTempView('taxi_zones')
+
+# Join and count pickups per zone
+df_result_6 = df_nyc.join(df_zones, df_nyc.PULocationID == df_zones.LocationID)
+df_result_6.createOrReplaceTempView('trips_data_zones')
+df_result_6_answer = spark.sql("""
+SELECT
+    PULocationID,
+    Zone,
+    COUNT(*) AS number_of_visitor
+FROM 
+    trips_data_zones
+GROUP BY
+    PULocationID,
+    Zone
+ORDER BY
+    number_of_visitor ASC
+""")
+
+df_result_6_answer.show()
+```
+
+---
+
+## Key Learnings from Module 6
+
+✅ Installed and configured PySpark with a local Spark session  
+✅ Read and processed Parquet files at scale with Spark DataFrames  
+✅ Repartitioned data for optimized parallel write performance  
+✅ Ran analytical queries using both DataFrame API and Spark SQL  
+✅ Used Spark UI (port 4040) for job monitoring and debugging  
+✅ Performed GroupBy, Join, and aggregation operations on 4M+ taxi records  
+✅ Integrated Spark with Google Cloud Storage and BigQuery  
+✅ Analyzed trip patterns in NYC Yellow Taxi November 2025 data
+
+---
+
 ## Technologies Used
 
 - **Module 1:** Docker, PostgreSQL, pgAdmin, Python, SQL
 - **Module 2:** Kestra, Google Cloud Platform (BigQuery), YAML workflows, scheduled triggers
 - **Module 3:** Google BigQuery, Google Cloud Storage (GCS), Parquet files, SQL, table partitioning & clustering
 - **Module 4:** dbt (data build tool), BigQuery, Jinja templating, SQL, data modeling, testing
+- **Module 6:** Apache Spark, PySpark, Parquet, Google Cloud Storage, BigQuery Spark Connector
 
 ---
 
