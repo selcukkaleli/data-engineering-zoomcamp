@@ -274,3 +274,5 @@ logs/
 logs/runs
 logs/*.log
 *.py[cod]
+
+module_6_batch_processing/data/
