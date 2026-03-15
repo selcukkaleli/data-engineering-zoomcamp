@@ -5,7 +5,8 @@ Module 2: Workflow Orchestration with Kestra
 Module 3: Data Warehousing & BigQuery  
 Module 4: Analytics Engineering with dbt  
 Module 5: Bruin Pipeline  
-Module 6: Batch Processing with Spark
+Module 6: Batch Processing with Spark  
+Module 7: Streaming with Kafka (Redpanda) & PyFlink
 
 ## Repository Structure
 
@@ -16,6 +17,7 @@ Module 6: Batch Processing with Spark
 | `module_3/` | Module 3: Data Warehousing & BigQuery homework solutions |
 | `module_4/taxi_rides_ny/` | Module 4: Analytics Engineering with dbt project |
 | `module_6_batch_processing/` | Module 6: Batch Processing with Spark (notebooks, scripts, data) |
+| `module_7_streaming/` | Module 7: Streaming with Kafka (Redpanda) & PyFlink |
 | `my-taxi-pipeline/` | Module 5: Bruin pipeline implementation |
 | `pipeline/` | Pipeline utilities (MCP config included) |
 | `dlt_workshop/` | dlt Workshop: REST API to BigQuery pipeline |
@@ -34,6 +36,27 @@ Module 6: Batch Processing with Spark
 | `module_6_batch_processing/fhvhv/2021/01/` | FHV data for 2021 January |
 | `module_6_batch_processing/tmp/revenue-zones/` | Revenue zones temp data |
 | `module_6_batch_processing/zones/` | Zone lookup data |
+| **Module 7 Files** | |
+| `module_7_streaming/homework/src/job/aggregation_job_hw.py` | Homework aggregation Flink job |
+| `module_7_streaming/homework/src/job/pass_through_job_hw.py` | Homework pass-through Flink job |
+| `module_7_streaming/homework/consumer_q3.py` | Kafka consumer for Question 3 |
+| `module_7_streaming/homework/producer_q2.py` | Kafka producer for Question 2 |
+| `module_7_streaming/homework/green_tripdata_2025-10.parquet` | Green taxi data for October 2025 |
+| `module_7_streaming/notebooks/src/consumer_db.py` | Consumer with DB integration |
+| `module_7_streaming/notebooks/src/consumer.py` | Basic Kafka consumer |
+| `module_7_streaming/notebooks/src/models.py` | Data models |
+| `module_7_streaming/notebooks/src/producer.py` | Basic Kafka producer |
+| `module_7_streaming/src/job/aggregation_job_hw_q4.py` | Q4: Tumbling window aggregation job |
+| `module_7_streaming/src/job/aggregation_job_hw_q6.py` | Q6: Hourly tip aggregation job |
+| `module_7_streaming/src/job/aggregation_job.py` | General aggregation Flink job |
+| `module_7_streaming/src/job/pass_through_job.py` | Pass-through Flink job |
+| `module_7_streaming/src/job/session_window_job_q5.py` | Q5: Session window job |
+| `module_7_streaming/src/producers/models.py` | Producer data models |
+| `module_7_streaming/src/producers/producer_realtime.py` | Real-time producer |
+| `module_7_streaming/docker-compose.yml` | Docker Compose for Redpanda + Flink + PostgreSQL |
+| `module_7_streaming/Dockerfile.flink` | Custom Flink Docker image |
+| `module_7_streaming/flink-config.yaml` | Flink configuration |
+| `module_7_streaming/pyproject.flink.toml` | Python project config for Flink |
 | **Core Files** | |
 | `Dockerfile` | Docker configuration for the pipeline |
 | `docker-compose.yaml` | Docker Compose setup for PostgreSQL and pgAdmin |
@@ -741,6 +764,264 @@ df_result_6_answer.show()
 
 ---
 
+## Module 7: Streaming with Kafka (Redpanda) & PyFlink
+
+### Assignment Overview
+Built a real-time streaming pipeline using Redpanda (a Kafka-compatible broker) and Apache PyFlink to process NYC Green Taxi trip data for October 2025. Implemented Kafka producers and consumers, then developed PyFlink jobs with tumbling and session windows to perform streaming aggregations. Results were written to PostgreSQL for analysis. All work is in the `module_7_streaming/` folder.
+
+### Infrastructure Setup
+
+The setup uses Docker Compose to spin up:
+- **Redpanda** (Kafka-compatible broker) on `localhost:9092`
+- **Flink Job Manager** at `http://localhost:8081`
+- **Flink Task Manager**
+- **PostgreSQL** on `localhost:5432`
+
+```bash
+cd module_7_streaming/
+docker compose build
+docker compose up -d
+```
+
+Flink jobs are submitted via:
+```bash
+docker exec -it workshop-jobmanager-1 flink run -py /opt/src/job/your_job.py
+```
+
+### HW7 Solutions
+
+#### Question 1. Redpanda Version
+
+**Question:** Run `rpk version` inside the Redpanda container. What version of Redpanda are you running?
+
+**Answer:** `v25.3.9`
+
+**Command:**
+```bash
+docker exec -it module_7_streaming-redpanda-1 rpk version
+```
+
+**Output:**
+```
+rpk version: v25.3.9
+Git ref:     836b4a36ef6d5121edbb1e68f0f673c2a8a244e2
+Build date:  2026 Feb 26 07:47:54 Thu
+OS/Arch:     linux/arm64
+Go version:  go1.24.3
+
+Redpanda Cluster
+  node-1  v25.3.9 - 836b4a36ef6d5121edbb1e68f0f673c2a8a244e2
+```
+
+---
+
+#### Question 2. Sending Data to Redpanda
+
+**Question:** Create a `green-trips` topic and write a producer to send the Green Taxi October 2025 data. How long did it take to send the entire dataset?
+
+**Answer:** ~3.29 seconds
+
+**Producer code** (`homework/producer_q2.py`):
+```python
+import json
+import time
+import pandas as pd
+from kafka import KafkaProducer
+
+
+url = "https://d37ci6vzurychx.cloudfront.net/trip-data/green_tripdata_2025-10.parquet"
+
+columns = [
+    "lpep_pickup_datetime",
+    "lpep_dropoff_datetime",
+    "PULocationID",
+    "DOLocationID",
+    "passenger_count",
+    "trip_distance",
+    "tip_amount",
+    "total_amount"
+]
+
+df = pd.read_parquet(url, columns=columns)
+
+producer = KafkaProducer(
+    bootstrap_servers=["localhost:9092"],
+    value_serializer=lambda v: json.dumps(v).encode("utf-8")
+)
+
+topic_name = "green-trips"
+
+t0 = time.time()
+
+for _, row in df.iterrows():
+    record = row.to_dict()
+
+    record["lpep_pickup_datetime"] = str(record["lpep_pickup_datetime"])
+    record["lpep_dropoff_datetime"] = str(record["lpep_dropoff_datetime"])
+
+    producer.send(topic_name, value=record)
+
+producer.flush()
+
+t1 = time.time()
+
+print(f"took {(t1 - t0):.2f} seconds")
+```
+
+---
+
+#### Question 3. Consumer — Trip Distance
+
+**Question:** Write a Kafka consumer that reads all messages from `green-trips`. How many trips have a `trip_distance` greater than 5.0?
+
+**Answer:** 8,506
+
+**Consumer code** (`homework/consumer_q3.py`):
+```python
+import json
+from kafka import KafkaConsumer
+
+server = "localhost:9092"
+topic_name = "green-trips"
+
+consumer = KafkaConsumer(
+    topic_name,
+    bootstrap_servers=[server],
+    auto_offset_reset="earliest",
+    enable_auto_commit=True,
+    group_id="green-trip-counter",
+    value_deserializer=lambda x: json.loads(x.decode("utf-8"))
+)
+
+count = 0
+total = 0
+max_messages = 49416
+
+for message in consumer:
+    trip = message.value
+    total += 1
+
+    if trip["trip_distance"] and trip["trip_distance"] > 5:
+        count += 1
+
+    if total >= max_messages:
+        break
+
+print("Trips with distance > 5:", count)
+# Output: Trips with distance > 5: 8506
+```
+
+---
+
+#### Question 4. Tumbling Window — Pickup Location
+
+**Question:** Using a 5-minute tumbling window, which `PULocationID` had the most trips in a single window?
+
+**Answer:** `74`
+
+**Flink job** (`src/job/aggregation_job_hw_q4.py`) uses a 5-minute tumbling window grouped by `PULocationID`, writing results to the `green_trips_aggregated` PostgreSQL table.
+
+**Result Query:**
+```sql
+SELECT PULocationID, num_trips
+FROM green_trips_aggregated
+ORDER BY num_trips DESC
+LIMIT 3;
+```
+
+**Output:**
+```
++--------------+-----------+
+| pulocationid | num_trips |
+|--------------+-----------|
+| 74           | 30        |
+| 74           | 28        |
+| 74           | 26        |
++--------------+-----------+
+```
+
+---
+
+#### Question 5. Session Window — Longest Streak
+
+**Question:** Using a session window with a 5-minute gap on `PULocationID`, how many trips were in the longest session?
+
+**Answer:** 81 trips
+
+**Flink job** (`src/job/session_window_job_q5.py`) uses a 5-minute session gap window on `PULocationID`, writing results to the `green_trips_sessions` PostgreSQL table.
+
+**Result Query:**
+```sql
+SELECT PULocationID, num_trips
+FROM green_trips_sessions
+ORDER BY num_trips DESC
+LIMIT 10;
+```
+
+**Output:**
+```
++--------------+-----------+
+| pulocationid | num_trips |
+|--------------+-----------|
+| 74           | 81        |
+| 74           | 72        |
+| 74           | 71        |
+| 74           | 71        |
+| 74           | 70        |
+| 74           | 69        |
+| 74           | 67        |
+| 74           | 56        |
+| 74           | 54        |
+| 75           | 54        |
++--------------+-----------+
+```
+
+---
+
+#### Question 6. Tumbling Window — Largest Tip
+
+**Question:** Using a 1-hour tumbling window, which hour had the highest total `tip_amount`?
+
+**Answer:** `2025-10-16 18:00:00`
+
+**Flink job** (`src/job/aggregation_job_hw_q6.py`) uses a 1-hour tumbling window to aggregate total tip amounts, writing results to the `tips_per_hour` PostgreSQL table.
+
+**Result Query:**
+```sql
+SELECT *
+FROM tips_per_hour
+ORDER BY total_tip DESC
+LIMIT 5;
+```
+
+**Output:**
+```
++---------------------+--------------------+
+| window_start        | total_tip          |
+|---------------------+--------------------|
+| 2025-10-16 18:00:00 | 510.8599999999999  |
+| 2025-10-30 16:00:00 | 494.41             |
+| 2025-10-09 18:00:00 | 472.01000000000016 |
+| 2025-10-10 17:00:00 | 470.0800000000002  |
+| 2025-10-16 17:00:00 | 445.01000000000005 |
++---------------------+--------------------+
+```
+
+---
+
+## Key Learnings from Module 7
+
+✅ Set up Redpanda as a Kafka-compatible message broker with Docker  
+✅ Built Kafka producers to stream Parquet data row-by-row to a topic  
+✅ Implemented Kafka consumers to read and filter streaming messages  
+✅ Created PyFlink jobs with tumbling windows (5-minute and 1-hour) for aggregations  
+✅ Implemented session windows to detect activity streaks per location  
+✅ Used event-time processing with watermarks for out-of-order event handling  
+✅ Wrote streaming results to PostgreSQL for downstream querying  
+✅ Analyzed real-time patterns in NYC Green Taxi October 2025 data
+
+---
+
 ## Technologies Used
 
 - **Module 1:** Docker, PostgreSQL, pgAdmin, Python, SQL
@@ -748,6 +1029,7 @@ df_result_6_answer.show()
 - **Module 3:** Google BigQuery, Google Cloud Storage (GCS), Parquet files, SQL, table partitioning & clustering
 - **Module 4:** dbt (data build tool), BigQuery, Jinja templating, SQL, data modeling, testing
 - **Module 6:** Apache Spark, PySpark, Parquet, Google Cloud Storage, BigQuery Spark Connector
+- **Module 7:** Apache Flink, PyFlink, Redpanda (Kafka), Python Kafka client, PostgreSQL, Docker Compose
 
 ---
 
